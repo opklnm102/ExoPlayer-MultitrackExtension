@@ -841,8 +841,8 @@ public abstract class MediaCodecTrackRenderer extends SampleSourceTrackRenderer 
 
   /**
    * Invoked when an output buffer is successfully processed.
-   * <p>
    * The default implementation is a no-op.
+   * <p>
    *
    * @param presentationTimeUs The timestamp associated with the output buffer.
    */

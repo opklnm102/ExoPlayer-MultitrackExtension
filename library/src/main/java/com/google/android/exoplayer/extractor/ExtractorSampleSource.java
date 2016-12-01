@@ -18,6 +18,7 @@ package com.google.android.exoplayer.extractor;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.SparseArray;
 import com.google.android.exoplayer.C;
 import com.google.android.exoplayer.MediaFormat;
