@@ -15,6 +15,7 @@ import com.google.android.exoplayer.drm.DrmInitData;
 import com.google.android.exoplayer.drm.DrmSessionManager;
 import com.google.android.exoplayer.drm.FrameworkMediaCrypto;
 import com.google.android.exoplayer.util.Assertions;
+import com.google.android.exoplayer.util.DownmixUtil;
 import com.google.android.exoplayer.util.NalUnitUtil;
 import com.google.android.exoplayer.util.TraceUtil;
 import com.google.android.exoplayer.util.Util;
@@ -51,9 +52,9 @@ public abstract class MediaCodecMultiTrackRenderer extends SampleSourceMultiTrac
         /**
          * Invoked when a decoder is successfully created.
          *
-         * @param decoderName The decoder that was configured and created.
-         * @param elapsedRealtimeMs {@code elapsedRealtime} timestamp of when the initialization
-         *    finished.
+         * @param decoderName              The decoder that was configured and created.
+         * @param elapsedRealtimeMs        {@code elapsedRealtime} timestamp of when the initialization
+         *                                 finished.
          * @param initializationDurationMs Amount of time taken to initialize the decoder.
          */
         void onDecoderInitialized(String decoderName, long elapsedRealtimeMs,
@@ -331,6 +332,28 @@ public abstract class MediaCodecMultiTrackRenderer extends SampleSourceMultiTrac
     @Override
     protected void onEnabled(int track, long positionUs, boolean joining) throws ExoPlaybackException {
         super.onEnabled(track, positionUs, joining);
+
+        enabledTrackCount = getTrackCount();  // 2
+        Log.d(TAG, "enabledTrackCount " + enabledTrackCount);
+
+        // 사용가능한 track만큼 할당
+        format = new MediaFormat[enabledTrackCount];
+        drmInitData = new DrmInitData[enabledTrackCount];
+        sampleHolder = new SampleHolder[enabledTrackCount];
+        formatHolder = new MediaFormatHolder[enabledTrackCount];
+        outputBufferInfo = new MediaCodec.BufferInfo[enabledTrackCount];
+        inputBuffers = new ByteBuffer[enabledTrackCount][];
+        outputBuffers = new ByteBuffer[enabledTrackCount][];
+
+        for (int trackIndex = 0; trackIndex < enabledTrackCount; trackIndex++) {
+            sampleHolder[trackIndex] = new SampleHolder(SampleHolder.BUFFER_REPLACEMENT_MODE_DISABLED);
+            formatHolder[trackIndex] = new MediaFormatHolder();
+            outputBufferInfo[trackIndex] = new MediaCodec.BufferInfo();
+        }
+
+        codec = new MediaCodec[enabledTrackCount];
+        inputIndex = new int[enabledTrackCount];
+        outputIndex = new int[enabledTrackCount];
     }
 
     @Override
@@ -1101,7 +1124,8 @@ public abstract class MediaCodecMultiTrackRenderer extends SampleSourceMultiTrac
         // 1번에 읽은 buffer가 같다고 생각하고 index를 전달
         ByteBuffer downmixBuffer;
         if (enabledTrackCount > 1) {  // audio track이 1개면 downmix 안한다.
-            downmixBuffer = downmixBuffer(outputIndex[0]);
+            downmixBuffer = DownmixUtil
+                    .downmixBuffer(outputBuffers, outputBufferInfo, outputIndex[0], enabledTrackCount);
         } else {
             downmixBuffer = outputBuffers[0][outputIndex[0]];
         }
@@ -1126,24 +1150,23 @@ public abstract class MediaCodecMultiTrackRenderer extends SampleSourceMultiTrac
         return false;
     }
 
-    // modify downmix case: codec count N
-    private ByteBuffer downmixBuffer(int index) {
-        byte[][] chunk = new byte[enabledTrackCount][];
-        for (int trackIndex = 0; trackIndex < enabledTrackCount; trackIndex++) {
-            chunk[trackIndex] = new byte[outputBufferInfo[trackIndex].size];
-            outputBuffers[trackIndex][index].get(chunk[trackIndex]);
-            outputBuffers[trackIndex][index].clear();
-        }
-
-        byte[] downmixChunk = new byte[outputBufferInfo[0].size];
-        for (int idx = 0; idx < downmixChunk.length; idx++) {
-            for (int trackIndex = 0; trackIndex < enabledTrackCount; trackIndex++) {
-                downmixChunk[idx] += chunk[trackIndex][idx];
-            }
-            downmixChunk[idx] = (byte) (downmixChunk[idx] / Math.sqrt(2));
-        }
-        return ByteBuffer.wrap(downmixChunk);
-    }
+//    private ByteBuffer downmixBuffer(int index) {
+//        byte[][] chunk = new byte[enabledTrackCount][];
+//        for (int trackIndex = 0; trackIndex < enabledTrackCount; trackIndex++) {
+//            chunk[trackIndex] = new byte[outputBufferInfo[trackIndex].size];
+//            outputBuffers[trackIndex][index].get(chunk[trackIndex]);
+//            outputBuffers[trackIndex][index].clear();
+//        }
+//
+//        byte[] downmixChunk = new byte[outputBufferInfo[0].size];
+//        for (int idx = 0; idx < downmixChunk.length; idx++) {
+//            for (int trackIndex = 0; trackIndex < enabledTrackCount; trackIndex++) {
+//                downmixChunk[idx] += chunk[trackIndex][idx];
+//            }
+//            downmixChunk[idx] = (byte) (downmixChunk[idx] / Math.sqrt(2));
+//        }
+//        return ByteBuffer.wrap(downmixChunk);
+//    }
 
     /**
      * Processes a new output format.
